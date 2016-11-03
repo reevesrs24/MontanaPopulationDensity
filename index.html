@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+    svg {
+        font: 10px sans-serif;
+        display: block;
+        margin: auto;
+        margin-top: 5%;
+    }
+
+    .caption {
+        font-weight: bold;
+    }
+
+    .key path {
+        display: none;
+    }
+
+    .key line {
+        stroke: #000;
+        shape-rendering: crispEdges;
+    }
+
+    .county-border {
+        fill: none;
+        stroke: #000;
+        stroke-opacity: .3;
+    }
+
+</style>
+<body>
+<script src="//d3js.org/d3.v3.min.js"></script>
+<script src="//d3js.org/topojson.v1.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+<div>
+<h1 style="text-align: center">Montana Population Density 2011 5 year Estimate</h1>
+
+<div id="div-red">
+
+<script>
+    var colorType = "red";
+    var changeMap = true;
+    var tracts = true;
+
+    var color = d3.scale.threshold()
+            .domain([1, 10, 50, 100, 500, 1000, 2000, 5000])
+            .range(["#fff7ec", "#fee8c8", "#fdd49e", "#fdbb84", "#fc8d59", "#ef6548", "#d7301f", "#b30000", "#7f0000"]);
+
+    function changeColor() {
+        console.log("TEST");
+        if (colorType == "red") {
+            color = d3.scale.threshold()
+                    .domain([1, 10, 50, 100, 500, 1000, 2000, 5000])
+                    .range(["#00e5d4", "#00d3d1", "#00afcd", "#009dcb", "#008cc9", "#007ac7", "#0056c3", "#0044c1", "#0033bf"]);
+
+            colorType = "blue";
+        } else {
+
+            color = d3.scale.threshold()
+                    .domain([1, 10, 50, 100, 500, 1000, 2000, 5000])
+                    .range(["#fff7ec", "#fee8c8", "#fdd49e", "#fdbb84", "#fc8d59", "#ef6548", "#d7301f", "#b30000", "#7f0000"]);
+
+            colorType = "red";
+        }
+        d3.select("svg").remove();
+        renderTree();
+    }
+
+    function changeMapStructure(){
+
+        if (changeMap) {
+
+            d3.select("svg").remove();
+            var width = 960, height = 500;
+
+            var formatNumber = d3.format(",d");
+
+            var path = d3.geo.path()
+                    .projection(null);
+
+            // A position encoding for the key only.
+            var x = d3.scale.linear()
+                    .domain([0, 5100])
+                    .range([0, 480]);
+
+            var xAxis = d3.svg.axis()
+                    .scale(x)
+                    .orient("bottom")
+                    .tickSize(13)
+                    .tickValues(color.domain())
+                    .tickFormat(function (d) {
+                        return d >= 100 ? formatNumber(d) : null;
+                    });
+
+            var svg = d3.select("#div-red").append("svg")
+                    .attr("width", width)
+                    .attr("height", height);
+
+            var g = svg.append("g")
+                    .attr("class", "key")
+                    .attr("transform", "translate(440,400)");
+
+            g.selectAll("rect")
+                    .data(color.range().map(function (d, i) {
+                        return {
+                            x0: i ? x(color.domain()[i - 1]) : x.range()[0],
+                            x1: i < color.domain().length ? x(color.domain()[i]) : x.range()[1],
+                            z: d
+                        };
+                    }))
+                    .enter().append("rect")
+                    .attr("height", 8)
+                    .attr("x", function (d) {
+                        return d.x0;
+                    })
+                    .attr("width", function (d) {
+                        return d.x1 - d.x0;
+                    })
+                    .style("fill", function (d) {
+                        return d.z;
+                    });
+
+            g.call(xAxis).append("text")
+                    .attr("class", "caption")
+                    .attr("y", -6)
+                    .text("Population per square mile");
+
+            d3.json("mt.json", function (error, mt) {
+                if (error) throw error;
+
+                var tracts = topojson.feature(mt, mt.objects.cb_2015_30_tract_500k);
+
+                // Clip tracts to land.
+                svg.append("defs").append("clipPath")
+                        .attr("id", "clip-land")
+                        .append("path")
+                        .datum(topojson.feature(mt, mt.objects.counties))
+                        .attr("d", path);
+
+                // Group tracts by color for faster rendering.
+
+                svg.append("g")
+                        .attr("class", "tract")
+                        .attr("clip-path", "url(#clip-land)")
+                        .selectAll("path")
+                        .data(d3.nest()
+                                .key(function (d) {
+                                    return color(d.properties.population / d.properties.area * 2.58999e6);
+                                })
+                                .entries(tracts.features.filter(function (d) {
+                                    //return d.properties.area;
+                                })))
+                        .enter().append("path")
+                        .style("fill", function (d) {
+                            return d.key;
+                        })
+                        .attr("d", function (d) {
+                            return path({type: "FeatureCollection", features: d.values});
+                        });
+
+                // Draw county borders.
+                svg.append("path")
+                        .datum(topojson.mesh(mt, mt.objects.counties, function (a, b) {
+                            return a !== b;
+                        }))
+                        .attr("class", "county-border")
+                        .attr("d", path);
+            });
+            changeMap = false;
+        } else {
+            changeMap = true;
+            d3.select("svg").remove();
+            renderTree();
+        }
+    }
+
+    function changeTracts() {
+
+        if (tracts) {
+            color = d3.scale.threshold()
+                    .domain([1, 10, 50, 100, 500, 1000, 2000, 5000])
+                    .range(["#cccccc", "#cccccc", "#cccccc", "#cccccc", "#cccccc", "#cccccc", "#cccccc", "#cccccc", "#cccccc"]);
+
+            tracts = false;
+        } else {
+
+            color = d3.scale.threshold()
+                    .domain([1, 10, 50, 100, 500, 1000, 2000, 5000])
+                    .range(["#fff7ec", "#fee8c8", "#fdd49e", "#fdbb84", "#fc8d59", "#ef6548", "#d7301f", "#b30000", "#7f0000"]);
+
+            tracts = true;
+        }
+        d3.select("svg").remove();
+        renderTree();
+    }
+
+    function renderTree() {
+        var width = 960, height = 500;
+
+        var formatNumber = d3.format(",d");
+
+        var path = d3.geo.path()
+                .projection(null);
+
+        // A position encoding for the key only.
+        var x = d3.scale.linear()
+                .domain([0, 5100])
+                .range([0, 480]);
+
+        var xAxis = d3.svg.axis()
+                .scale(x)
+                .orient("bottom")
+                .tickSize(13)
+                .tickValues(color.domain())
+                .tickFormat(function (d) {
+                    return d >= 100 ? formatNumber(d) : null;
+                });
+
+        var svg = d3.select("#div-red").append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+        var g = svg.append("g")
+                .attr("class", "key")
+                .attr("transform", "translate(440,400)");
+
+        g.selectAll("rect")
+                .data(color.range().map(function (d, i) {
+                    return {
+                        x0: i ? x(color.domain()[i - 1]) : x.range()[0],
+                        x1: i < color.domain().length ? x(color.domain()[i]) : x.range()[1],
+                        z: d
+                    };
+                }))
+                .enter().append("rect")
+                .attr("height", 8)
+                .attr("x", function (d) {
+                    return d.x0;
+                })
+                .attr("width", function (d) {
+                    return d.x1 - d.x0;
+                })
+                .style("fill", function (d) {
+                    return d.z;
+                });
+
+        g.call(xAxis).append("text")
+                .attr("class", "caption")
+                .attr("y", -6)
+                .text("Population per square mile");
+
+        d3.json("mt.json", function (error, mt) {
+            if (error) throw error;
+
+            var tracts = topojson.feature(mt, mt.objects.cb_2015_30_tract_500k);
+
+            // Clip tracts to land.
+            svg.append("defs").append("clipPath")
+                    .attr("id", "clip-land")
+                    .append("path")
+                    .datum(topojson.feature(mt, mt.objects.counties))
+                    .attr("d", path);
+
+            // Group tracts by color for faster rendering.
+
+            svg.append("g")
+                    .attr("class", "tract")
+                    .attr("clip-path", "url(#clip-land)")
+                    .selectAll("path")
+                    .data(d3.nest()
+                            .key(function (d) {
+                                return color(d.properties.population / d.properties.area * 2.58999e6);
+                            })
+                            .entries(tracts.features.filter(function (d) {
+                               return d.properties.area;
+                            })))
+                    .enter().append("path")
+                    .style("fill", function (d) {
+                        return d.key;
+                    })
+                    .attr("d", function (d) {
+                        return path({type: "FeatureCollection", features: d.values});
+                    });
+
+            // Draw county borders.
+            svg.append("path")
+                    .datum(topojson.mesh(mt, mt.objects.counties, function (a, b) {
+                        return a !== b;
+                    }))
+                    .attr("class", "county-border")
+                    .attr("d", path);
+        });
+
+        d3.select(self.frameElement).style("height", height + "px");
+    }
+    renderTree()
+
+
+</script>
+</div>
+
+    <div style="margin-bottom: 25%; margin-right: 20%; float: right">
+        <button type="button" id="changeColor" class="btn btn-primary">Change Color</button>
+    </div>
+    <div style="margin-bottom: 25%; margin-right: 20%; float: right">
+        <button type="button" id="changeMap" class="btn btn-success">State Boundary On</button>
+    </div>
+    <div style="margin-bottom: 25%; margin-right: 20%; float: right">
+        <button type="button" id="changeTracts" class="btn btn-warning">Tracts On</button>
+    </div>
+
+    <script>
+
+        $( "#changeColor" ).click(function() {
+            changeColor();
+        });
+
+        $( "#changeMap" ).click(function() {
+            var boundary = (!changeMap) ? "State Boundary On" : "State Boundary Off";
+            $('#changeMap').html(boundary);
+
+            changeMapStructure();
+        });
+
+        $( "#changeTracts" ).click(function() {
+            var tract = (!tracts) ? "Tracts On" : "Tracts Off";
+
+            $('#changeTracts').html(tract);
+            changeTracts();
+        });
+    </script>
+</div>
